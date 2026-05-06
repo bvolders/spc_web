@@ -53,26 +53,35 @@ RE_BTN_NAME = re.compile(r'\bname="([^"]+)"', re.IGNORECASE)
 RE_BTN_VALUE = re.compile(r'\bvalue="([^"]*)"', re.IGNORECASE)
 
 # Page: controller_status
-# Status indicators rendered as `<FONT COLOR="green|red">OK|Fault</FONT>`,
-# preceded by a label like "Cabinet Tamper:" — we extract these as
-# (label, color, text) triples.
+# Each diagnostic row is structured as:
+#   <TR><TD WIDTH=160>Label:</TD><TD>...value...</TD></TR>
+# Where ...value... is either:
+#   - <FONT COLOR="green|red">OK|Fault|...</FONT>  (status indicator)
+#   - "13.5V" / "60mA" / "OK (50Hz)"               (numeric / plain text)
 RE_STATUS_INDICATOR = re.compile(
-    r"([A-Za-z][A-Za-z0-9.\s]{1,40}?):\s*"
-    r'<FONT\s+COLOR="(\w+)"[^>]*>([^<]+)</FONT>',
+    r"<TD\b[^>]*>\s*([A-Za-z][^<]{1,60}?)\s*</TD>"
+    r"\s*<TD\b[^>]*>\s*"
+    r'<FONT\s+COLOR="(\w+)"[^>]*>\s*([^<]+?)\s*</FONT>',
     re.IGNORECASE,
 )
 # Numeric value rows: "Battery Voltage: 13.5V" / "Battery Current: 60mA"
 RE_NUMERIC_ROW = re.compile(
-    r"<td[^>]*>\s*([A-Za-z][A-Za-z0-9.\s]{1,40}?)\s*</td>"
-    r"\s*<td[^>]*>\s*(\d+\.?\d*)\s*(V|mA|Hz)?\s*</td>",
+    r"<TD\b[^>]*>\s*([A-Za-z][^<]{1,60}?)\s*</TD>"
+    r"\s*<TD\b[^>]*>\s*(\d+\.?\d*)\s*(V|mA|Hz)\b",
     re.IGNORECASE,
 )
 # Plain key:value diagnostics rows
 RE_DIAG_ROW = re.compile(
-    r"<td[^>]*>\s*([A-Za-z][^<:]{1,40}?)\s*:?\s*</td>"
-    r"\s*<td[^>]*>\s*([^<\s][^<]{0,80}?)\s*</td>",
+    r"<TD\b[^>]*>\s*([A-Za-z][^<]{1,60}?)\s*</TD>"
+    r"\s*<TD\b[^>]*>\s*([^<\s][^<]{0,80}?)\s*</TD>",
     re.IGNORECASE,
 )
+
+
+def _strip_trailing_colon(s: str) -> str:
+    """Labels in the panel HTML have a trailing ':' — strip it for clean keys."""
+    s = s.strip()
+    return s[:-1].strip() if s.endswith(":") else s
 
 # Page: log
 RE_LOG_ENTRY = re.compile(
@@ -282,14 +291,14 @@ def parse_controller_status(html):
     """
     indicators = {}
     for m in RE_STATUS_INDICATOR.finditer(html):
-        label = re.sub(r"\s+", " ", m.group(1)).strip()
+        label = _strip_trailing_colon(re.sub(r"\s+", " ", m.group(1)))
         color = m.group(2).strip().lower()
         text = m.group(3).strip()
         indicators[label] = {"color": color, "text": text}
 
     metrics = {}
     for m in RE_NUMERIC_ROW.finditer(html):
-        label = re.sub(r"\s+", " ", m.group(1)).strip()
+        label = _strip_trailing_colon(re.sub(r"\s+", " ", m.group(1)))
         try:
             value = float(m.group(2))
         except ValueError:
@@ -299,7 +308,7 @@ def parse_controller_status(html):
 
     diagnostics = {}
     for m in RE_DIAG_ROW.finditer(html):
-        label = re.sub(r"\s+", " ", m.group(1)).strip()
+        label = _strip_trailing_colon(re.sub(r"\s+", " ", m.group(1)))
         value = re.sub(r"\s+", " ", m.group(2)).strip()
         # Skip rows we already captured as indicators or metrics
         if label in indicators or label in metrics:
