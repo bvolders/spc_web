@@ -258,6 +258,15 @@ class SPCSession:
             data = {"fullset_area1": "Fullset"}
         elif arm_state == "forceset":
             data = {"fullset_force1": "Force set"}
+        elif arm_state == "partset_a":
+            # Part-set level A — perimeter only (door/window contacts armed,
+            # PIRs disabled). Used as "armed_night" in HA. The button's
+            # value attribute is locale-dependent ("KONTAKTEN" in Dutch,
+            # "Partset" in English etc.) — the panel only checks form-field
+            # presence, value contents are ignored.
+            data = {"partset_a_area1": "Partset"}
+        elif arm_state == "partset_b":
+            data = {"partset_b_area1": "Partset"}
         else:
             raise SPCCommandError(f"{arm_state}: unknown arm state")
 
