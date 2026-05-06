@@ -51,10 +51,13 @@ class SPCAlarm(CoordinatorEntity, AlarmControlPanelEntity):
     """Alarm entity representing all SPC areas."""
 
     _attr_code_arm_required = False
+    # ARM_NIGHT and ARM_AWAY are always supported (every Vanderbilt SPC has a
+    # Full-set and at least Part-set A). ARM_HOME (= Part-set B) is added
+    # dynamically by the supported_features property when the panel actually
+    # exposes a partset_b_area1 button — see below.
     _attr_supported_features = (
         AlarmControlPanelEntityFeature.ARM_AWAY
         | AlarmControlPanelEntityFeature.ARM_NIGHT
-        | AlarmControlPanelEntityFeature.ARM_HOME
     )
     _attr_has_entity_name = True
 
@@ -65,6 +68,23 @@ class SPCAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         self._attr_name = "Alarm"
         self._attr_unique_id = f"{unique_prefix}-alarm"
         self._attr_device_info = device_info
+
+    @property
+    def supported_features(self):
+        """Add ARM_HOME only when the panel actually has Part-set B configured.
+
+        Vanderbilt SPC supports up to 2 Part-set levels per area. Most
+        installations only configure Part-set A. Without this check, HA would
+        offer the user an "Arm Home" button that silently does nothing on
+        such panels (the POST has no matching form field, the panel ignores
+        it). We detect availability by looking for the partset_b_area1
+        button in the cache populated during disarmed-state polls.
+        """
+        features = self._attr_supported_features
+        cache = self.coordinator.data.get("button_cache") or {}
+        if "partset_b_area1" in cache:
+            features = features | AlarmControlPanelEntityFeature.ARM_HOME
+        return features
 
     @property
     def alarm_state(self):
