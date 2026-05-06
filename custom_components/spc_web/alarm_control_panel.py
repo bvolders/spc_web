@@ -14,17 +14,32 @@ from .spc import SPCError
 LOGGER = logging.getLogger(__name__)
 
 # Maps the lowercased text the panel renders in the "All Areas" cell of the
-# system_summary page to a Home Assistant alarm state. The exact string varies
-# by panel firmware and locale; we accept multiple known synonyms for Part-set
-# (Vanderbilt's "perimeter only" mode), and log a warning for anything we
-# haven't seen yet so users can tell us what their panel actually emits.
+# system_summary page to a Home Assistant alarm state.
+#
+# The string is locale-dependent: the panel renders the localised button
+# label, not a canonical English token. So we accept many synonyms for
+# Part-set (Vanderbilt's "perimeter only" mode) across the locales the panel
+# firmware ships in. If your panel emits a string we don't cover yet, the
+# code below logs a warning with the raw value — please open an issue with
+# that string and we'll add it.
 ARM_STATE_TO_HA = {
+    # Disarmed
     "unset": AlarmControlPanelState.DISARMED,
+    # Full-set / armed-away
     "fullset": AlarmControlPanelState.ARMED_AWAY,
-    "partset": AlarmControlPanelState.ARMED_NIGHT,
+    "full set": AlarmControlPanelState.ARMED_AWAY,
+    # Part-set / armed-night
+    "partset": AlarmControlPanelState.ARMED_NIGHT,         # English canonical
     "part set": AlarmControlPanelState.ARMED_NIGHT,
     "partset_a": AlarmControlPanelState.ARMED_NIGHT,
     "part set a": AlarmControlPanelState.ARMED_NIGHT,
+    "kontakten": AlarmControlPanelState.ARMED_NIGHT,       # Dutch (verified)
+    "contacten": AlarmControlPanelState.ARMED_NIGHT,       # Dutch alt
+    "partiel": AlarmControlPanelState.ARMED_NIGHT,         # French (best guess)
+    "teilset": AlarmControlPanelState.ARMED_NIGHT,         # German (best guess)
+    "teilbereich": AlarmControlPanelState.ARMED_NIGHT,     # German alt
+    "parziale": AlarmControlPanelState.ARMED_NIGHT,        # Italian (best guess)
+    "parcial": AlarmControlPanelState.ARMED_NIGHT,         # Spanish (best guess)
 }
 
 
