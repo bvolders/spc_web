@@ -1,7 +1,7 @@
 {
   "domain": "spc_web",
   "name": "Vanderbilt SPC Web",
-  "version": "0.2.1+partset",
+  "version": "0.3.0+full",
   "codeowners": ["@awahlig"],
   "documentation": "https://github.com/awahlig/spc_web",
   "issue_tracker": "https://github.com/awahlig/spc_web/issues",

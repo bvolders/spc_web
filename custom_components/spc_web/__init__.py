@@ -53,12 +53,33 @@ async def async_setup_entry(hass, entry):
 
     await spc.login()
 
+    # Persistent across polls: maps arming-button name (e.g., "partset_a_area1")
+    # to its `value=` attribute as it last appeared in a disarmed-state poll.
+    # Used to reverse-look up the "All Areas" status text when the panel is
+    # currently armed (the displayed text equals the value of whichever
+    # arming button created this state). Surviving across polls means even
+    # if the panel is armed when the integration starts, we'll begin
+    # populating the cache the first time it disarms.
+    button_cache: dict[str, str] = {}
+
     async def update():
+        nonlocal button_cache
         try:
+            arm_state, button_cache = await spc.get_system_summary(button_cache)
+            zones = await spc.get_zones()
+            controller_status = await spc.get_controller_status()
+            try:
+                events = await spc.get_event_log(limit=20)
+            except SPCError as event_err:
+                # Event log is non-essential — log and carry on.
+                LOGGER.debug("event log fetch failed: %s", event_err)
+                events = []
             return {
-                "arm_state": await spc.get_arm_state(),
-                "zones": {zone["zone_id"]: zone
-                          for zone in await spc.get_zones()},
+                "arm_state": arm_state,
+                "button_cache": dict(button_cache),
+                "zones": {zone["zone_id"]: zone for zone in zones},
+                "controller_status": controller_status,
+                "events": events,
             }
 
         except SPCError as error:

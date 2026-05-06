@@ -13,33 +13,15 @@ from .spc import SPCError
 
 LOGGER = logging.getLogger(__name__)
 
-# Maps the lowercased text the panel renders in the "All Areas" cell of the
-# system_summary page to a Home Assistant alarm state.
-#
-# The string is locale-dependent: the panel renders the localised button
-# label, not a canonical English token. So we accept many synonyms for
-# Part-set (Vanderbilt's "perimeter only" mode) across the locales the panel
-# firmware ships in. If your panel emits a string we don't cover yet, the
-# code below logs a warning with the raw value — please open an issue with
-# that string and we'll add it.
+# Maps the canonical arm-state code returned by parse_system_summary_state()
+# to a Home Assistant alarm state. The codes are derived from the firmware-
+# canonical form-button names (e.g., `partset_a_area1` → `partset_a`), so
+# this map is locale- and installer-label-invariant.
 ARM_STATE_TO_HA = {
-    # Disarmed
     "unset": AlarmControlPanelState.DISARMED,
-    # Full-set / armed-away
     "fullset": AlarmControlPanelState.ARMED_AWAY,
-    "full set": AlarmControlPanelState.ARMED_AWAY,
-    # Part-set / armed-night
-    "partset": AlarmControlPanelState.ARMED_NIGHT,         # English canonical
-    "part set": AlarmControlPanelState.ARMED_NIGHT,
     "partset_a": AlarmControlPanelState.ARMED_NIGHT,
-    "part set a": AlarmControlPanelState.ARMED_NIGHT,
-    "kontakten": AlarmControlPanelState.ARMED_NIGHT,       # Dutch (verified)
-    "contacten": AlarmControlPanelState.ARMED_NIGHT,       # Dutch alt
-    "partiel": AlarmControlPanelState.ARMED_NIGHT,         # French (best guess)
-    "teilset": AlarmControlPanelState.ARMED_NIGHT,         # German (best guess)
-    "teilbereich": AlarmControlPanelState.ARMED_NIGHT,     # German alt
-    "parziale": AlarmControlPanelState.ARMED_NIGHT,        # Italian (best guess)
-    "parcial": AlarmControlPanelState.ARMED_NIGHT,         # Spanish (best guess)
+    "partset_b": AlarmControlPanelState.ARMED_HOME,
 }
 
 
@@ -72,6 +54,7 @@ class SPCAlarm(CoordinatorEntity, AlarmControlPanelEntity):
     _attr_supported_features = (
         AlarmControlPanelEntityFeature.ARM_AWAY
         | AlarmControlPanelEntityFeature.ARM_NIGHT
+        | AlarmControlPanelEntityFeature.ARM_HOME
     )
     _attr_has_entity_name = True
 
@@ -88,15 +71,23 @@ class SPCAlarm(CoordinatorEntity, AlarmControlPanelEntity):
         arm_state = self.coordinator.data["arm_state"]
         ha_state = ARM_STATE_TO_HA.get(arm_state)
         if ha_state is None and arm_state is not None:
-            LOGGER.warning(
-                "Unrecognised SPC arm_state %r — please open an issue with this value",
+            # parse_system_summary_state may return "armed_unknown:<text>" if it
+            # detects the unset button is present but can't reverse-look up the
+            # status text. That happens before we've populated the button
+            # cache from a disarmed-state poll — usually transient.
+            LOGGER.debug(
+                "Arm state %r not yet mapped (button cache may not be primed)",
                 arm_state,
             )
         return ha_state
 
     @property
     def extra_state_attributes(self):
-        return {"raw_arm_state": self.coordinator.data.get("arm_state")}
+        data = self.coordinator.data
+        return {
+            "raw_arm_state": data.get("arm_state"),
+            "button_cache": data.get("button_cache"),
+        }
 
     async def _async_set_arm_state(self, arm_state):
         try:
@@ -114,3 +105,6 @@ class SPCAlarm(CoordinatorEntity, AlarmControlPanelEntity):
 
     async def async_alarm_arm_night(self, code=None):
         await self._async_set_arm_state("partset_a")
+
+    async def async_alarm_arm_home(self, code=None):
+        await self._async_set_arm_state("partset_b")
