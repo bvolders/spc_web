@@ -111,9 +111,14 @@ async def async_setup_entry(hass, entry):
     fast_zones_raw = entry.options.get(
         CONF_FAST_POLL_ZONES, DEFAULT_FAST_POLL_ZONES,
     )
-    fast_zone_ids = {
-        z.strip() for z in (fast_zones_raw or "").split(",") if z.strip()
-    }
+    # parse_status_zones yields zone_id as int; keep the set as int too
+    # so membership checks downstream (zone["zone_id"] in fast_zone_ids)
+    # match. Silently drops malformed entries.
+    fast_zone_ids = set()
+    for z in (fast_zones_raw or "").split(","):
+        z = z.strip()
+        if z.isdigit():
+            fast_zone_ids.add(int(z))
     fast_coordinator = None
     if fast_zone_ids:
         fast_seconds = entry.options.get(
@@ -124,7 +129,14 @@ async def async_setup_entry(hass, entry):
         async def fast_update():
             try:
                 zones = await spc.get_zones()
-                return {"zones": {zone["zone_id"]: zone for zone in zones}}
+                zone_dict = {zone["zone_id"]: zone for zone in zones}
+                # TEMP DEBUG: log fast-poll cycle with status of fast zones.
+                # Remove once latency is verified.
+                LOGGER.info(
+                    "fast tick zones=%s",
+                    {zid: zone_dict[zid]["status"] for zid in sorted(fast_zone_ids) if zid in zone_dict},
+                )
+                return {"zones": zone_dict}
             except SPCError as error:
                 raise UpdateFailed(str(error)) from error
             except (httpx.HTTPError, ValueError) as error:

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 import ssl
@@ -399,6 +400,12 @@ class SPCSession:
         self.model = ""             # panel model name
         self.serial_number = ""     # panel serial number
         self.site = ""              # alarm site name
+        # Serialise login() across concurrent coordinators (fast + slow).
+        # Without this, a session-expiry race mid-poll can have two
+        # coroutines call login() simultaneously, the panel issues two
+        # SIDs, and one of them is invalidated as soon as the second
+        # logs in — leading to apparent random poll failures.
+        self._login_lock = asyncio.Lock()
 
     async def _request(self, method, path, params=None, data=None):
         resp = await self.client.request(
@@ -420,7 +427,17 @@ class SPCSession:
             html = await do()
             if not is_login_page(html):
                 return html
-        await self.login()
+        async with self._login_lock:
+            # Re-check inside the lock: another concurrent caller may have
+            # just refreshed the SID. If so, retry the action with the new
+            # SID before issuing another login. Saves a redundant login
+            # round-trip and prevents the panel issuing two competing SIDs
+            # that mutually invalidate each other.
+            if self.sid:
+                html = await do()
+                if not is_login_page(html):
+                    return html
+            await self.login()
         return await do()
 
     async def login(self):
