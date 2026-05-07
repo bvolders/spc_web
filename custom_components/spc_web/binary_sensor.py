@@ -65,16 +65,26 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
 
     coordinator = data["coordinator"]
+    fast_coordinator = data.get("fast_coordinator")
+    fast_zone_ids = data.get("fast_zone_ids", set())
     get_zone_device_info = data["get_zone_device_info"]
     alarm_device_info = data["alarm_device_info"]
     unique_prefix = data["unique_prefix"]
 
-    # Per-zone entities (existing behaviour)
+    # Per-zone entities. The "actuated" sensor for zones listed in
+    # fast_poll_zones is bound to the fast coordinator (sub-second polling)
+    # so motion-triggered automations have minimal latency. Tamper sensors
+    # always stay on the slow coordinator — they change rarely.
     for zone in coordinator.data["zones"].values():
         device_info = get_zone_device_info(zone)
+        actuated_coord = (
+            fast_coordinator
+            if fast_coordinator is not None and zone["zone_id"] in fast_zone_ids
+            else coordinator
+        )
         async_add_entities([
             SPCZoneActuated(
-                coordinator=coordinator,
+                coordinator=actuated_coord,
                 device_info=device_info,
                 unique_prefix=unique_prefix,
                 zone=zone,

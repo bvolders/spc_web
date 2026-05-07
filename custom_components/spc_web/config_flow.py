@@ -12,6 +12,10 @@ from .const import (
     DEFAULT_POLL_INTERVAL,
     CONF_VERIFY_SSL,
     CONF_LEGACY_SSL,
+    CONF_FAST_POLL_INTERVAL,
+    CONF_FAST_POLL_ZONES,
+    DEFAULT_FAST_POLL_INTERVAL,
+    DEFAULT_FAST_POLL_ZONES,
 )
 from .spc import (
     create_spc_session,
@@ -34,6 +38,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 OPTIONS_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL): vol.Coerce(int),
+        # Fast-poll specific zones (e.g., motion PIRs) for sub-second
+        # automation latency. Comma-separated zone IDs (e.g., "6,15,16").
+        # Empty disables the fast coordinator entirely.
+        vol.Optional(CONF_FAST_POLL_ZONES, default=DEFAULT_FAST_POLL_ZONES): str,
+        vol.Optional(CONF_FAST_POLL_INTERVAL, default=DEFAULT_FAST_POLL_INTERVAL): vol.Coerce(int),
     }
 )
 

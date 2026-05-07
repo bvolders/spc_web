@@ -18,6 +18,10 @@ from .const import (
     CONF_POLL_INTERVAL,
     CONF_VERIFY_SSL,
     CONF_LEGACY_SSL,
+    CONF_FAST_POLL_INTERVAL,
+    CONF_FAST_POLL_ZONES,
+    DEFAULT_FAST_POLL_INTERVAL,
+    DEFAULT_FAST_POLL_ZONES,
 )
 from .spc import (
     create_spc_session,
@@ -100,6 +104,45 @@ async def async_setup_entry(hass, entry):
     )
     await coordinator.async_config_entry_first_refresh()
 
+    # Fast zone-only coordinator. Only built when fast_poll_zones is non-empty.
+    # Polls /secure.htm?page=status_zones at fast_poll_interval seconds to give
+    # motion-triggered automations sub-second latency without hammering the
+    # rest of the panel's pages (system_summary + controller_status).
+    fast_zones_raw = entry.options.get(
+        CONF_FAST_POLL_ZONES, DEFAULT_FAST_POLL_ZONES,
+    )
+    fast_zone_ids = {
+        z.strip() for z in (fast_zones_raw or "").split(",") if z.strip()
+    }
+    fast_coordinator = None
+    if fast_zone_ids:
+        fast_seconds = entry.options.get(
+            CONF_FAST_POLL_INTERVAL, DEFAULT_FAST_POLL_INTERVAL,
+        )
+        fast_interval = timedelta(seconds=int(fast_seconds))
+
+        async def fast_update():
+            try:
+                zones = await spc.get_zones()
+                return {"zones": {zone["zone_id"]: zone for zone in zones}}
+            except SPCError as error:
+                raise UpdateFailed(str(error)) from error
+            except (httpx.HTTPError, ValueError) as error:
+                raise UpdateFailed(
+                    f"SPC fast-poll communication error: {error!s}"
+                ) from error
+
+        fast_coordinator = DataUpdateCoordinator(
+            hass,
+            LOGGER,
+            config_entry=entry,
+            name="Vanderbilt SPC Web (fast zones)",
+            update_interval=fast_interval,
+            update_method=fast_update,
+            always_update=False,
+        )
+        await fast_coordinator.async_config_entry_first_refresh()
+
     alarm_device_id = (DOMAIN, f"{spc.serial_number}-alarm")
     alarm_device_info = DeviceInfo({
         "identifiers": {alarm_device_id},
@@ -122,6 +165,8 @@ async def async_setup_entry(hass, entry):
     hass.data[DOMAIN][entry.entry_id] = {
         "spc": spc,
         "coordinator": coordinator,
+        "fast_coordinator": fast_coordinator,
+        "fast_zone_ids": fast_zone_ids,
         "alarm_device_info": alarm_device_info,
         "get_zone_device_info": get_zone_device_info,
         "unique_prefix": f"spc{spc.serial_number}",
