@@ -4,6 +4,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -133,13 +134,34 @@ class SPCZoneActuated(CoordinatorEntity, BinarySensorEntity):
         self._attr_device_class = ACTUATED_DEVCLASS.get(zone_type)
         self._attr_unique_id = f"{unique_prefix}-zone{zone_id}-actuated"
         self._attr_device_info = device_info
+        # Edge-trigger tracking: timestamps the most-recent off→on
+        # transition so automations can reason about elapsed-since-last
+        # without relying on `for: 5 minutes` (which resets on every
+        # blip). Exposed via extra_state_attributes.
+        self._last_actuated = None
+        self._was_on = False
+
+    def _current_on(self):
+        zone = self.coordinator.data["zones"].get(self._zone_id)
+        return bool(zone and zone["status"] == "actuated")
 
     @property
     def is_on(self):
-        zone = self.coordinator.data["zones"].get(self._zone_id)
-        if zone:
-            return (zone["status"] == "actuated")
-        return False
+        on_now = self._current_on()
+        if on_now and not self._was_on:
+            self._last_actuated = dt_util.utcnow()
+        self._was_on = on_now
+        return on_now
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "last_actuated": (
+                self._last_actuated.isoformat()
+                if self._last_actuated is not None
+                else None
+            ),
+        }
 
 
 class SPCZoneTamper(CoordinatorEntity, BinarySensorEntity):

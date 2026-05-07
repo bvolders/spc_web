@@ -20,8 +20,10 @@ from .const import (
     CONF_LEGACY_SSL,
     CONF_FAST_POLL_INTERVAL,
     CONF_FAST_POLL_ZONES,
+    CONF_FAST_POLL_ENABLE_ENTITY,
     DEFAULT_FAST_POLL_INTERVAL,
     DEFAULT_FAST_POLL_ZONES,
+    DEFAULT_FAST_POLL_ENABLE_ENTITY,
 )
 from .spc import (
     create_spc_session,
@@ -125,18 +127,24 @@ async def async_setup_entry(hass, entry):
             CONF_FAST_POLL_INTERVAL, DEFAULT_FAST_POLL_INTERVAL,
         )
         fast_interval = timedelta(seconds=int(fast_seconds))
+        fast_enable_entity = entry.options.get(
+            CONF_FAST_POLL_ENABLE_ENTITY, DEFAULT_FAST_POLL_ENABLE_ENTITY,
+        ).strip()
 
         async def fast_update():
+            # Optional gate: when fast_poll_enable_entity is configured,
+            # skip the HTTP cycle while it's "off" so the panel isn't hit
+            # 60×/min during windows where no automation needs the data.
+            # Returns the previous data unchanged so listeners see no
+            # spurious updates.
+            if fast_enable_entity:
+                gate = hass.states.get(fast_enable_entity)
+                if gate is not None and gate.state != "on":
+                    return fast_coordinator.data or {"zones": {}}
+
             try:
                 zones = await spc.get_zones()
-                zone_dict = {zone["zone_id"]: zone for zone in zones}
-                # TEMP DEBUG: log fast-poll cycle with status of fast zones.
-                # Remove once latency is verified.
-                LOGGER.info(
-                    "fast tick zones=%s",
-                    {zid: zone_dict[zid]["status"] for zid in sorted(fast_zone_ids) if zid in zone_dict},
-                )
-                return {"zones": zone_dict}
+                return {"zones": {zone["zone_id"]: zone for zone in zones}}
             except SPCError as error:
                 raise UpdateFailed(str(error)) from error
             except (httpx.HTTPError, ValueError) as error:

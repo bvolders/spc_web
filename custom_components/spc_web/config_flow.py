@@ -14,8 +14,10 @@ from .const import (
     CONF_LEGACY_SSL,
     CONF_FAST_POLL_INTERVAL,
     CONF_FAST_POLL_ZONES,
+    CONF_FAST_POLL_ENABLE_ENTITY,
     DEFAULT_FAST_POLL_INTERVAL,
     DEFAULT_FAST_POLL_ZONES,
+    DEFAULT_FAST_POLL_ENABLE_ENTITY,
 )
 from .spc import (
     create_spc_session,
@@ -43,6 +45,9 @@ OPTIONS_SCHEMA = vol.Schema(
         # Empty disables the fast coordinator entirely.
         vol.Optional(CONF_FAST_POLL_ZONES, default=DEFAULT_FAST_POLL_ZONES): str,
         vol.Optional(CONF_FAST_POLL_INTERVAL, default=DEFAULT_FAST_POLL_INTERVAL): vol.Coerce(int),
+        # When set (e.g. "input_boolean.spc_fast_poll_enabled"), the
+        # fast coordinator skips its HTTP cycle while the gate is "off".
+        vol.Optional(CONF_FAST_POLL_ENABLE_ENTITY, default=DEFAULT_FAST_POLL_ENABLE_ENTITY): str,
     }
 )
 

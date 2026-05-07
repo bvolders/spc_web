@@ -14,10 +14,15 @@ CONF_LEGACY_SSL = "legacy_ssl"
 # tamper sensors, unlisted zones) stays on the slow coordinator.
 CONF_FAST_POLL_INTERVAL = "fast_poll_interval"
 CONF_FAST_POLL_ZONES = "fast_poll_zones"
+# When set, the fast coordinator skips its HTTP poll cycle while this
+# entity is "off" — useful to suspend per-second panel hits during
+# windows where no automation will act on motion data anyway.
+CONF_FAST_POLL_ENABLE_ENTITY = "fast_poll_enable_entity"
 
 DEFAULT_POLL_INTERVAL = 30
 DEFAULT_FAST_POLL_INTERVAL = 1
 DEFAULT_FAST_POLL_ZONES = ""  # comma-separated zone_ids, e.g. "6,15,16"
+DEFAULT_FAST_POLL_ENABLE_ENTITY = ""  # empty = always poll when zones configured
 
 PLATFORMS = [
     "alarm_control_panel",
